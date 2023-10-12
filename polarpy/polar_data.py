@@ -1,67 +1,159 @@
 import numpy as np
 from threeML.utils.OGIP.response import InstrumentResponse
 import h5py
+from astropy.io import fits
 
 
 class POLARData(object):
 
-    def __init__(self, polar_hdf5_file, polar_hdf5_response=None, reference_time=0.):
+    def __init__(self, polar_events, polar_specrsp=None, polar_polrsp=None, input_format='fits' , reference_time=0.):
         """
-        container class that converts raw POLAR HDF5 data into useful python
+        container class that converts raw POLAR fits data into useful python
         variables
 
-        This can build both the polarization and spectral data
+        This can build both the polarimetric and spectral data
         
+        :param polar_events: path to polar event file
+                             if 'hdf5', 'polar_events' contains 'specrsp' already
+        :param polar_specrsp: path to polar spectral responce file
+                             if 'hdf5', no need to put 'polar_specrsp'
+        :param polar_polrsp: path to polar polarimetric responce file
+                             if need to use bins' defination in 'polrsp' to bin you scatter_angle
+        :param input_format:  input files's format, either 'fits' or 'hdf5'
+                             specify that for the current two formats of polar data
+        :param reference_time: reference time of the events (tunix)
 
-        :param polar_root_file: path to polar event file
-        :param reference_time: reference time of the events (tunix?)
-        :param rsp_file: path to rsp file
         """
 
-        with h5py.File(polar_hdf5_file, 'r') as f:
+        if input_format == 'fits':
 
-            # This gets the spectral response
-            rsp_grp = f['rsp']
+            with fits.open(polar_specrsp) as hdu_spec:
 
-            matrix = rsp_grp['matrix'][()]
-            ebounds = rsp_grp['ebounds'][()]
-            mc_low = rsp_grp['mc_low'][()]
-            mc_high = rsp_grp['mc_high'][()]
+                # This gets the spectral response
+                mc_low = hdu_spec['MATRIX'].data.field('ENERG_LO')
+                mc_high = hdu_spec['MATRIX'].data.field('ENERG_HI')
+                ebounds = np.append(mc_low, mc_high[-1])
+                matrix = hdu_spec['MATRIX'].data.field('MATRIX')
+                matrix = matrix.transpose()
 
-            # open the event file
+            with fits.open(polar_events) as hdu_evt:
 
-            # extract the pedestal corrected ADC channels
-            # which are non-integer and possibly
-            # less than zero
-            pha = f['energy'][()]
+                # open the event file
 
-            # non-zero ADC channels are invalid
-            idx = pha >= 0
-            #pha = pha[idx]
+                # extract the pedestal corrected ADC channels
+                # which are non-integer and possibly
+                # less than zero
 
-            idx2 = (pha <= ebounds.max()) & (pha >= ebounds.min())
+                pha = hdu_evt['EVENTS'].data.field('ENERGY')
 
-            pha = pha[idx2 & idx]
+                # non-zero ADC channels are invalid
+                idx = pha >= 0
+                #pha = pha[idx]
 
-            # get the dead time fraction
-            self._dead_time_fraction = (f['dead_ratio'][()])[idx & idx2]
+                idx2 = (pha <= ebounds.max()) & (pha >= ebounds.min())
 
-            # get the arrival time, in tunix of the events
-            self._time = (f['time'][()])[idx & idx2] - reference_time
+                pha = pha[idx2 & idx]
 
-            # digitize the ADC channels into bins
-            # these bins are preliminary
+                # get the dead time fraction
+                self._dead_time_fraction = (hdu_evt['EVENTS'].data.field('DRATIO'))[idx & idx2]
 
-            # now do the scattering angles
+                # get the arrival time, in tunix of the events
+                self._time = (hdu_evt['EVENTS'].data.field('TUNIX'))[idx & idx2] - reference_time
 
-            scattering_angles = f['scatter_angle'][()]
+                # digitize the ADC channels into bins
+                # these bins are preliminary
 
-            # clear the bad scattering angles
-            idx = scattering_angles != -1
+                # now do the scattering angles
 
-            self._scattering_angle_time = (f['time'][()])[idx] - reference_time
-            self._scattering_angle_dead_time_fraction = (f['dead_ratio'][()])[idx]
-            self._scattering_angles = scattering_angles[idx]
+                scattering_angles = hdu_evt['EVENTS'].data.field('SANGLE')
+
+                # clear the bad scattering angles
+                idx = scattering_angles != -1
+
+                self._scattering_angle_time = (hdu_evt['EVENTS'].data.field('TUNIX'))[idx] - reference_time
+                self._scattering_angle_dead_time_fraction = (hdu_evt['EVENTS'].data.field('DRATIO'))[idx]
+                self._scattering_angles = scattering_angles[idx]
+
+
+            # bin the scattering_angles
+
+            if polar_polrsp is not None:
+
+                with fits.open(polar_polrsp) as hdu_pol:
+
+                    scatter_bounds = hdu_pol['INSAVALS'].data.field('SA_IN')
+
+                self._scattering_bins = scatter_bounds
+                self._binned_scattering_angles = np.digitize(self._scattering_angles, scatter_bounds)
+
+            else:
+
+                self._scattering_bins = None
+                self._binned_scattering_angles = None
+
+
+        if input_format == 'h5':
+
+            with h5py.File(polar_events, 'r') as f:
+
+                # This gets the spectral response
+                rsp_grp = f['rsp']
+
+                matrix = rsp_grp['matrix'][()]
+                ebounds = rsp_grp['ebounds'][()]
+                mc_low = rsp_grp['mc_low'][()]
+                mc_high = rsp_grp['mc_high'][()]
+
+                # open the event file
+
+                # extract the pedestal corrected ADC channels
+                # which are non-integer and possibly
+                # less than zero
+                pha = f['energy'][()]
+
+                # non-zero ADC channels are invalid
+                idx = pha >= 0
+                #pha = pha[idx]
+
+                idx2 = (pha <= ebounds.max()) & (pha >= ebounds.min())
+
+                pha = pha[idx2 & idx]
+
+                # get the dead time fraction
+                self._dead_time_fraction = (f['dead_ratio'][()])[idx & idx2]
+
+                # get the arrival time, in tunix of the events
+                self._time = (f['time'][()])[idx & idx2] - reference_time
+
+                # digitize the ADC channels into bins
+                # these bins are preliminary
+
+                # now do the scattering angles
+
+                scattering_angles = f['scatter_angle'][()]
+
+                # clear the bad scattering angles
+                idx = scattering_angles != -1
+
+                self._scattering_angle_time = (f['time'][()])[idx] - reference_time
+                self._scattering_angle_dead_time_fraction = (f['dead_ratio'][()])[idx]
+                self._scattering_angles = scattering_angles[idx]
+
+            # bin the scattering_angles
+
+            if polar_polrsp is not None:
+
+                with h5py.File(polar_polrsp, 'r') as f:
+
+                    scatter_bounds = f['bins'][()]
+
+                self._scattering_bins = scatter_bounds
+                self._binned_scattering_angles = np.digitize(self._scattering_angles, scatter_bounds)
+
+            else:
+
+                self._scattering_bins = None
+                self._binned_scattering_angles = None
 
         # build the POLAR response
 
@@ -72,22 +164,6 @@ class POLARData(object):
         # bin the ADC channels
 
         self._binned_pha = np.digitize(pha, ebounds)
-
-        # bin the scattering_angles
-
-        if polar_hdf5_response is not None:
-
-            with h5py.File(polar_hdf5_response, 'r') as f:
-
-                scatter_bounds = f['bins'][()]
-
-            self._scattering_bins = scatter_bounds
-            self._binned_scattering_angles = np.digitize(self._scattering_angles, scatter_bounds)
-
-        else:
-
-            self._scattering_bins = None
-            self._binned_scattering_angles = None
 
     @property
     def pha(self):
