@@ -14,14 +14,13 @@ class POLARData(object):
         This can build both the polarimetric and spectral data
         
         :param polar_events: path to polar event file
-                             if 'hdf5', 'polar_events' contains 'specrsp' already
         :param polar_specrsp: path to polar spectral responce file
-                             if 'hdf5', no need to put 'polar_specrsp'
         :param polar_polrsp: path to polar polarimetric responce file
-                             if need to use bins' defination in 'polrsp' to bin you scatter_angle
-        :param input_format:  input files's format, either 'fits' or 'hdf5'
+                             it will use SABOUNDS to bin you SA data in 'polar_events'
+                             if 'NONE', we assume 'SA' data is already binned
+        :param input_format: input files's format, either 'fits' or 'hdf5'
                              specify that for the current two formats of polar data
-        :param reference_time: reference time of the events (tunix)
+        :param reference_time: reference time of the events (in SECOND)
 
         """
 
@@ -44,7 +43,7 @@ class POLARData(object):
                 # which are non-integer and possibly
                 # less than zero
 
-                pha = hdu_evt['EVENTS'].data.field('ENERGY')
+                pha = hdu_evt['POLEVENTS'].data.field('ENERGY')
 
                 # non-zero ADC channels are invalid
                 idx = pha >= 0
@@ -55,23 +54,23 @@ class POLARData(object):
                 pha = pha[idx2 & idx]
 
                 # get the dead time fraction
-                self._dead_time_fraction = (hdu_evt['EVENTS'].data.field('DRATIO'))[idx & idx2]
+                self._dead_time_fraction = (hdu_evt['POLEVENTS'].data.field('DEADFRAC'))[idx & idx2]
 
-                # get the arrival time, in tunix of the events
-                self._time = (hdu_evt['EVENTS'].data.field('TUNIX'))[idx & idx2] - reference_time
+                # get the arrival time, in SECOND
+                self._time = (hdu_evt['POLEVENTS'].data.field('TIME'))[idx & idx2] - reference_time
 
                 # digitize the ADC channels into bins
                 # these bins are preliminary
 
                 # now do the scattering angles
 
-                scattering_angles = hdu_evt['EVENTS'].data.field('SANGLE')
+                scattering_angles = hdu_evt['POLEVENTS'].data.field('SA')
 
                 # clear the bad scattering angles
                 idx = scattering_angles != -1
 
-                self._scattering_angle_time = (hdu_evt['EVENTS'].data.field('TUNIX'))[idx] - reference_time
-                self._scattering_angle_dead_time_fraction = (hdu_evt['EVENTS'].data.field('DRATIO'))[idx]
+                self._scattering_angle_time = (hdu_evt['POLEVENTS'].data.field('TIME'))[idx] - reference_time
+                self._scattering_angle_dead_time_fraction = (hdu_evt['POLEVENTS'].data.field('DEADFRAC'))[idx]
                 self._scattering_angles = scattering_angles[idx]
 
 
@@ -80,8 +79,9 @@ class POLARData(object):
             if polar_polrsp is not None:
 
                 with fits.open(polar_polrsp) as hdu_pol:
-
-                    scatter_bounds = hdu_pol['INSAVALS'].data.field('SA_IN')
+                    samin = hdu_pol['SABOUNDS'].data.field('SA_MIN')
+                    samax = hdu_pol['SABOUNDS'].data.field('SA_MAX')
+                    scatter_bounds = np.append(samin, samax[-1])
 
                 self._scattering_bins = scatter_bounds
                 self._binned_scattering_angles = np.digitize(self._scattering_angles, scatter_bounds)
@@ -122,7 +122,7 @@ class POLARData(object):
                 # get the dead time fraction
                 self._dead_time_fraction = (f['dead_ratio'][()])[idx & idx2]
 
-                # get the arrival time, in tunix of the events
+                # get the arrival time, in SECOND
                 self._time = (f['time'][()])[idx & idx2] - reference_time
 
                 # digitize the ADC channels into bins
