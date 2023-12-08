@@ -42,6 +42,10 @@ class POLARData(object):
                 # extract the pedestal corrected ADC channels
                 # which are non-integer and possibly
                 # less than zero
+                
+                # Extract mission and instrument info
+                self._mission = hdu_evt['POLEVENTS'].header['TELESCOP']
+                self._instrument = hdu_evt['POLEVENTS'].header['INSTRUME']
 
                 pha = hdu_evt['POLEVENTS'].data.field('ENERGY')
 
@@ -165,6 +169,15 @@ class POLARData(object):
 
         self._binned_pha = np.digitize(pha, ebounds)
 
+
+    @property
+    def mission(self):
+        return self._mission
+
+    @property
+    def instrument(self):
+        return self._instrument
+    
     @property
     def pha(self):
         return self._binned_pha
