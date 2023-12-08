@@ -64,47 +64,35 @@ class PolarResponse(object):
 
         # now go through the response and extract things
 
-        if '.polrsp' in self._rsp_file:
+        if '.prsp' in self._rsp_file:
 
             with fits.open(self._rsp_file) as hdu_pol:
 
-                mc_low = hdu_pol['INEBOUNDS'].data.field('ENERG_LO')
-                mc_high = hdu_pol['INEBOUNDS'].data.field('ENERG_HI')
-
-                energy = (mc_low + mc_high) / 2.
-                energy = np.array(energy, dtype=np.float64)
-
-                ene_lo, ene_hi = [], []
-
-                # the bin widths are hard coded right now.
-                # this should be IMPROVED!
-
-                for ene in energy:
-
-                    ene_lo.append(ene - 2.5)
-                    ene_hi.append(ene + 2.5)
+                ene_lo = np.array(hdu_pol['INEBOUNDS'].data.field('ENERG_LO'), dtype=np.float64)
+                ene_hi = np.array(hdu_pol['INEBOUNDS'].data.field('ENERG_HI'), dtype=np.float64)
 
                 pol_ang = np.array(hdu_pol['INPAVALS'].data.field('PA_IN'), dtype=np.float64)
 
+                # we have 100% pol and 0% pol matrix in the prsp file
                 pol_deg = np.array([0., 100.], dtype=np.float64)
 
-                bins = hdu_pol['INSAVALS'].data.field('SA_IN')
+                samin = np.array(hdu_pol['SABOUNDS'].data.field('SA_MIN'), dtype=np.float64)
+                samax = np.array(hdu_pol['SABOUNDS'].data.field('SA_MAX'), dtype=np.float64)
+                bins = np.append(samin, samax[-1])
+                # get the bin centers as these are where things
+                # should be evaluated
+                bin_center = 0.5 * (bins[:-1] + bins[1:])
 
                 polmatrix = hdu_pol['SPECRESP POLMATRIX'].data
                 polmatrix = polmatrix.transpose()
 
                 uppolmatrix = hdu_pol['SPECRESP UNPOLMATRIX'].data
                 uppolmatrix = uppolmatrix.transpose()
-                uppolmatrix = [uppolmatrix] * 61
+                uppolmatrix = [uppolmatrix] * pol_ang.size
                 uppolmatrix = np.stack(uppolmatrix, axis=1)
 
                 pol_matrix = np.stack((uppolmatrix,polmatrix), axis=2)
                 pol_matrix = np.array(pol_matrix, dtype=np.float64)
-
-                # get the bin centers as these are where things
-                # should be evaluated
-
-                bin_center = 0.5 * (bins[:-1] + bins[1:])
 
                 all_interp = []
 
