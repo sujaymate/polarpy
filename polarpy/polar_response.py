@@ -70,6 +70,8 @@ class PolarResponse(object):
 
                 ene_lo = np.array(hdu_pol['INEBOUNDS'].data.field('ENERG_LO'), dtype=np.float64)
                 ene_hi = np.array(hdu_pol['INEBOUNDS'].data.field('ENERG_HI'), dtype=np.float64)
+                
+                energy = (ene_lo + ene_hi) / 2.
 
                 pol_ang = np.array(hdu_pol['INPAVALS'].data.field('PA_IN'), dtype=np.float64)
 
