@@ -1,4 +1,3 @@
-import h5py
 import numba as nb
 from numba.experimental import jitclass
 import numpy as np
@@ -63,118 +62,62 @@ class PolarResponse(object):
         """
 
         # now go through the response and extract things
+        with fits.open(self._rsp_file) as hdu_pol:
 
-        if '.prsp' in self._rsp_file:
+            ene_lo = np.array(hdu_pol['INEBOUNDS'].data.field('ENERG_LO'), dtype=np.float64)
+            ene_hi = np.array(hdu_pol['INEBOUNDS'].data.field('ENERG_HI'), dtype=np.float64)
+            
+            energy = (ene_lo + ene_hi) / 2.
 
-            with fits.open(self._rsp_file) as hdu_pol:
+            pol_ang = np.array(hdu_pol['INPAVALS'].data.field('PA_IN'), dtype=np.float64)
 
-                ene_lo = np.array(hdu_pol['INEBOUNDS'].data.field('ENERG_LO'), dtype=np.float64)
-                ene_hi = np.array(hdu_pol['INEBOUNDS'].data.field('ENERG_HI'), dtype=np.float64)
-                
-                energy = (ene_lo + ene_hi) / 2.
+            # we have 100% pol and 0% pol matrix in the prsp file
+            pol_deg = np.array([0., 100.], dtype=np.float64)
 
-                pol_ang = np.array(hdu_pol['INPAVALS'].data.field('PA_IN'), dtype=np.float64)
+            samin = np.array(hdu_pol['SABOUNDS'].data.field('SA_MIN'), dtype=np.float64)
+            samax = np.array(hdu_pol['SABOUNDS'].data.field('SA_MAX'), dtype=np.float64)
+            bins = np.append(samin, samax[-1])
+            # get the bin centers as these are where things
+            # should be evaluated
+            bin_center = 0.5 * (bins[:-1] + bins[1:])
 
-                # we have 100% pol and 0% pol matrix in the prsp file
-                pol_deg = np.array([0., 100.], dtype=np.float64)
+            polmatrix = hdu_pol['SPECRESP POLMATRIX'].data
+            polmatrix = polmatrix.transpose()
 
-                samin = np.array(hdu_pol['SABOUNDS'].data.field('SA_MIN'), dtype=np.float64)
-                samax = np.array(hdu_pol['SABOUNDS'].data.field('SA_MAX'), dtype=np.float64)
-                bins = np.append(samin, samax[-1])
-                # get the bin centers as these are where things
-                # should be evaluated
-                bin_center = 0.5 * (bins[:-1] + bins[1:])
+            uppolmatrix = hdu_pol['SPECRESP UNPOLMATRIX'].data
+            uppolmatrix = uppolmatrix.transpose()
+            uppolmatrix = [uppolmatrix] * pol_ang.size
+            uppolmatrix = np.stack(uppolmatrix, axis=1)
 
-                polmatrix = hdu_pol['SPECRESP POLMATRIX'].data
-                polmatrix = polmatrix.transpose()
+            pol_matrix = np.stack((uppolmatrix,polmatrix), axis=2)
+            pol_matrix = np.array(pol_matrix, dtype=np.float64)
 
-                uppolmatrix = hdu_pol['SPECRESP UNPOLMATRIX'].data
-                uppolmatrix = uppolmatrix.transpose()
-                uppolmatrix = [uppolmatrix] * pol_ang.size
-                uppolmatrix = np.stack(uppolmatrix, axis=1)
+            all_interp = []
 
-                pol_matrix = np.stack((uppolmatrix,polmatrix), axis=2)
-                pol_matrix = np.array(pol_matrix, dtype=np.float64)
+            # now we construct a series of interpolation
+            # functions that are called during the fit.
+            # we use some nice matrix math to handle this
 
-                all_interp = []
+            for i, bm in enumerate(bin_center):
 
-                # now we construct a series of interpolation
-                # functions that are called during the fit.
-                # we use some nice matrix math to handle this
+                this_interpolator = FastGridInterpolate(
+                    (energy, pol_ang, pol_deg), pol_matrix[..., i])
 
-                for i, bm in enumerate(bin_center):
+                all_interp.append(this_interpolator)
 
-                    this_interpolator = FastGridInterpolate(
-                        (energy, pol_ang, pol_deg), pol_matrix[..., i])
+            # finally we attach all of this to the class
 
-                    all_interp.append(this_interpolator)
+            self._all_interp = all_interp
 
-                # finally we attach all of this to the class
+            self._ene_lo = ene_lo
+            self._ene_hi = ene_hi
+            self._energy_mid = energy
 
-                self._all_interp = all_interp
+            self._n_scatter_bins = len(bin_center)
+            self._scattering_bins = bin_center
+            self._scattering_bins_lo = bins[:-1]
+            self._scattering_bins_hi = bins[1:]            
 
-                self._ene_lo = ene_lo
-                self._ene_hi = ene_hi
-                self._energy_mid = energy
-
-                self._n_scatter_bins = len(bin_center)
-                self._scattering_bins = bin_center
-                self._scattering_bins_lo = bins[:-1]
-                self._scattering_bins_hi = bins[1:]            
-
-
-        if 'h5' in self._rsp_file:
-
-            with h5py.File(self._rsp_file, 'r') as f:
-
-                energy = f['energy'][()]
-
-                ene_lo, ene_hi = [], []
-
-                # the bin widths are hard coded right now.
-                # this should be IMPROVED!
-
-                for ene in energy:
-
-                    ene_lo.append(ene - 2.5)
-                    ene_hi.append(ene + 2.5)
-
-                pol_ang = np.array(f['pol_ang'][()])
-
-                pol_deg = np.array(f['pol_deg'][()])
-
-                bins = np.array(f['bins'][()])
-
-                # get the bin centers as these are where things
-                # should be evaluated
-
-                bin_center = 0.5 * (bins[:-1] + bins[1:])
-
-                all_interp = []
-
-                # now we construct a series of interpolation
-                # functions that are called during the fit.
-                # we use some nice matrix math to handle this
-
-                for i, bm in enumerate(bin_center):
-
-                    this_interpolator = FastGridInterpolate(
-                        (energy, pol_ang, pol_deg), f['matrix'][..., i])
-
-                    all_interp.append(this_interpolator)
-
-                # finally we attach all of this to the class
-
-                self._all_interp = all_interp
-
-                self._ene_lo = ene_lo
-                self._ene_hi = ene_hi
-                self._energy_mid = energy
-
-                self._n_scatter_bins = len(bin_center)
-                self._scattering_bins = bin_center
-                self._scattering_bins_lo = bins[:-1]
-                self._scattering_bins_hi = bins[1:]
 
     @property
     def ene_lo(self):
