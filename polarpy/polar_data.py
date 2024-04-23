@@ -34,9 +34,6 @@ class POLARData(object):
             mc_energies = np.append(mc_low, mc_high[-1])
             self._rsp = InstrumentResponse(matrix=matrix, ebounds=ebounds, monte_carlo_energies=mc_energies)
 
-            # bin the ADC channels
-            self._binned_pha = np.digitize(pha, ebounds)
-
         with fits.open(polar_events) as hdu_evt:
 
             # open the event file
@@ -79,6 +76,8 @@ class POLARData(object):
             self._scattering_angle_dead_time_fraction = (hdu_evt['POLEVENTS'].data.field('DEADFRAC'))[idx]
             self._scattering_angles = scattering_angles[idx]
 
+        # bin the ADC channels
+        self._binned_pha = np.digitize(pha, ebounds)
 
         # bin the scattering_angles
 
