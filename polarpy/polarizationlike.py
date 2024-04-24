@@ -7,7 +7,7 @@ import numba as nb
 
 from astromodels import Parameter, Uniform_prior
 from polarpy.modulation_curve_file import ModulationCurveFile
-from polarpy.polar_response import PolarResponse
+from polarpy.polresponse import PolResponse
 from threeML import PluginPrototype
 from threeML.io.plotting.step_plot import step_plot
 from threeML.utils.binner import Rebinner
@@ -17,15 +17,15 @@ from threeML.utils.statistics.likelihood_functions import (
     poisson_observed_gaussian_background, poisson_observed_poisson_background)
 
 
-class PolarLike(PluginPrototype):
+class PolarizationLike(PluginPrototype):
     """
-    Preliminary POLAR polarization plugin
+    Generic polarization plugin
     """
 
     def __init__(self, name, observation, background, response, interval_number=None, verbose=False):
         """
 
-        The Polarization likelihood for POLAR. This plugin is heavily modeled off
+        The Polarization likelihood for a given mission. This plugin is heavily modeled off
         the 3ML dispersion based plugins. It interpolates the spectral photon model
         over the scattering angle bins to allow for spectral + polarization analysis.
 
@@ -33,9 +33,9 @@ class PolarLike(PluginPrototype):
 
         :param interval_number: The time interval starting from 1.
         :param name: The name of the plugin
-        :param observation: The POLAR observation file
-        :param background: The POLAR background file
-        :param response: The POLAR polarization response
+        :param observation: The observation file
+        :param background: The background file
+        :param response: The polarization response
 
         :param verbose:
 
@@ -106,7 +106,7 @@ class PolarLike(PluginPrototype):
 
         # pass to the plugin proto
 
-        super(PolarLike, self).__init__(name, nuisance_parameters)
+        super(PolarizationLike, self).__init__(name, nuisance_parameters)
 
         # The following vectors are the ones that will be really used for the computation. At the beginning they just
         # point to the original ones, but if a rebinner is used and/or a mask is created through set_active_measurements,
@@ -121,15 +121,15 @@ class PolarLike(PluginPrototype):
         # we can either attach or build a response
 
         assert isinstance(response, str) or isinstance(
-            response, PolarResponse), 'The response must be a file name or a PolarResponse'
+            response, PolResponse), 'The response must be a file name or a PolarResponse'
 
-        if isinstance(response, PolarResponse):
+        if isinstance(response, PolResponse):
 
             self._response = response
 
         else:
 
-            self._response = PolarResponse(response)
+            self._response = PolResponse(response)
 
         # attach the interpolators to the
 
@@ -270,7 +270,7 @@ class PolarLike(PluginPrototype):
             new_background = self._background.clone(
                 new_counts=randomized_background_counts, new_count_errors=background_count_errors)
 
-            new_plugin = PolarLike(
+            new_plugin = PolarizationLike(
                 name=new_name,
                 observation=new_observation,
                 background=new_background,

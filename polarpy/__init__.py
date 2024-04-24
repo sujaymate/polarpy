@@ -1,5 +1,5 @@
-from polarpy.polar_response import PolarResponse
-from polarpy.polarlike import PolarLike
+from polarpy.polresponse import PolResponse
+from polarpy.polarizationlike import PolarizationLike
 
 from ._version import get_versions
 
