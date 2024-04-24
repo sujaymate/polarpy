@@ -34,15 +34,13 @@ class FastGridInterpolate(object):
         return eval_linear(self._grid, self._values, v)
 
 
-class PolarResponse(object):
+class PolResponse(object):
 
     def __init__(self, response_file):
         """
-        Construct the polar response from a response file.
-        This is the POLARIZATION response.
+        Construct the polarisation response from the mission specific polarisation response file.
 
-
-        :param response_file: 
+        :param response_file: Polarisation response file in the defined format (.prsp)
         :returns: 
         :rtype: 
 

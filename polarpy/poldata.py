@@ -3,25 +3,25 @@ from threeML.utils.OGIP.response import InstrumentResponse
 from astropy.io import fits
 
 
-class POLARData(object):
+class PolData(object):
 
-    def __init__(self, polar_events, polar_specrsp=None, polar_polrsp=None, reference_time=0.):
+    def __init__(self, polevents, specrsp=None, polrsp=None, reference_time=0.):
         """
         container class that converts raw POLAR fits data into useful python
         variables
 
         This can build both the polarimetric and spectral data
         
-        :param polar_events: path to polar event file
-        :param polar_specrsp: path to polar spectral responce file
-        :param polar_polrsp: path to polar polarimetric responce file
+        :param poevents: path to polarisation data event file
+        :param specrsp: path to spectral responce file
+        :param polrsp: path to polarisation responce file
                              it will use SABOUNDS to bin you SA data in 'polar_events'
                              if 'NONE', we assume 'SA' data is already binned
         :param reference_time: reference time of the events (in SECOND)
 
         """
 
-        with fits.open(polar_specrsp) as hdu_spec:
+        with fits.open(specrsp) as hdu_spec:
 
             # This gets the spectral response
             mc_low = hdu_spec['MATRIX'].data.field('ENERG_LO')
@@ -34,7 +34,7 @@ class POLARData(object):
             mc_energies = np.append(mc_low, mc_high[-1])
             self._rsp = InstrumentResponse(matrix=matrix, ebounds=ebounds, monte_carlo_energies=mc_energies)
 
-        with fits.open(polar_events) as hdu_evt:
+        with fits.open(polevents) as hdu_evt:
 
             # open the event file
 
@@ -81,9 +81,9 @@ class POLARData(object):
 
         # bin the scattering_angles
 
-        if polar_polrsp is not None:
+        if polrsp is not None:
 
-            with fits.open(polar_polrsp) as hdu_pol:
+            with fits.open(polrsp) as hdu_pol:
                 samin = hdu_pol['SABOUNDS'].data.field('SA_MIN')
                 samax = hdu_pol['SABOUNDS'].data.field('SA_MAX')
                 scatter_bounds = np.append(samin, samax[-1])
